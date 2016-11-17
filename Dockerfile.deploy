@@ -1,0 +1,18 @@
+FROM alpine:3.4
+
+RUN set -x                  && \
+    apk --update upgrade    && \
+    apk add ca-certificates wget && \
+    update-ca-certificates
+
+ENV KUBE_LATEST_VERSION="v1.4.5"
+ENV KUBE_URL="https://storage.googleapis.com/kubernetes-release/release/${KUBE_LATEST_VERSION}/kubernetes-client-linux-amd64.tar.gz"
+
+RUN set -x \
+    && wget -O - ${KUBE_URL} | \
+    tar zxOf - kubernetes/client/bin/kubectl > /bin/kubectl \
+    && chmod +x /bin/kubectl
+
+COPY configmap-reload /configmap-reload
+
+ENTRYPOINT ["/configmap-reload"]

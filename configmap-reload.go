@@ -3,30 +3,32 @@ package main
 import (
 	"flag"
 	"log"
-	"net/http"
 	"os"
-	"path/filepath"
 
 	fsnotify "gopkg.in/fsnotify.v1"
+	"os/exec"
+	"path/filepath"
+	"strings"
 )
 
-var volumeDir = flag.String("volume-dir", "", "the config map volume directory to watch for updates")
-var webhook = flag.String("webhook-url", "", "the url to send a request to when the specified config map volume directory has been updated")
-var webhookMethod = flag.String("webhook-method", "POST", "the HTTP method url to use to send the webhook")
-var webhookStatusCode = flag.Int("webhook-status-code", 200, "the HTTP status code indicating successful triggering of reload")
+var folder = flag.String("folder", "", "Folder to watch for changes in it")
+var shCommand = flag.String("command", "", "Command beeing executed on trigger. Arguments need to be seperated by ',' like 'nginx,-s,reload'")
+var containerName = flag.String("container", "", "Container name in pod")
 
 func main() {
 	flag.Parse()
-
-	if *volumeDir == "" {
-		log.Println("Missing volume-dir")
-		log.Println()
+	if *folder == "" {
+		log.Println("Missing folder")
 		flag.Usage()
 		os.Exit(1)
 	}
-	if *webhook == "" {
-		log.Println("Missing webhook")
-		log.Println()
+	if *shCommand == "" {
+		log.Println("Missing shell command to execute")
+		flag.Usage()
+		os.Exit(1)
+	}
+	if *containerName == "" {
+		log.Println("Missing container name in the pod")
 		flag.Usage()
 		os.Exit(1)
 	}
@@ -42,26 +44,17 @@ func main() {
 		for {
 			select {
 			case event := <-watcher.Events:
-				if event.Op&fsnotify.Create == fsnotify.Create {
-					if filepath.Base(event.Name) == "..data" {
-						log.Println("config map updated")
-						req, err := http.NewRequest(*webhookMethod, *webhook, nil)
-						if err != nil {
-							log.Println("error:", err)
-							continue
-						}
-						resp, err := http.DefaultClient.Do(req)
-						if err != nil {
-							log.Println("error:", err)
-							continue
-						}
-						resp.Body.Close()
-						if resp.StatusCode != *webhookStatusCode {
-							log.Println("error:", "Received response code", resp.StatusCode, ", expected", *webhookStatusCode)
-							continue
-						}
-						log.Println("successfully triggered reload")
+				log.Println("Something happend:", event)
+				if event.Op == fsnotify.Create && filepath.Base(event.Name) == "..data" {
+					log.Println("Watched file changed")
+					args := []string{"exec", os.Getenv("HOSTNAME"), "-c", *containerName, "--"}
+					splitted := strings.Split(*shCommand, ",")
+					args = append(args, splitted...)
+					b, err := exec.Command("kubectl", args...).CombinedOutput()
+					if err != nil {
+						log.Println(err)
 					}
+					log.Println("Command result", string(b))
 				}
 			case err := <-watcher.Errors:
 				log.Println("error:", err)
@@ -69,7 +62,7 @@ func main() {
 		}
 	}()
 
-	err = watcher.Add(*volumeDir)
+	err = watcher.Add(*folder)
 	if err != nil {
 		log.Fatal(err)
 	}

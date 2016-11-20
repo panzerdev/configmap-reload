@@ -47,9 +47,21 @@ func main() {
 				log.Println("Something happend:", event)
 				if event.Op == fsnotify.Create && filepath.Base(event.Name) == "..data" {
 					log.Println("Watched file changed")
-					args := []string{"exec", os.Getenv("HOSTNAME"), "-c", *containerName, "--"}
+					// command exec, pod name aka HOSTNAME, container name
+					args := []string{"exec", os.Getenv("HOSTNAME"), "-c", *containerName}
+					// optional NAMESPACE if present
+					nameSpace := os.Getenv("NAMESPACE")
+					log.Println("Namespace found", nameSpace != "", "with value", nameSpace)
+					if nameSpace != "" {
+						args = append(args, "-n", nameSpace)
+					}
+					// command splitted by commas
 					splitted := strings.Split(*shCommand, ",")
+					args = append(args, "--")
 					args = append(args, splitted...)
+
+					log.Println("Command executed:", "kubectl", args)
+					// execute
 					b, err := exec.Command("kubectl", args...).CombinedOutput()
 					if err != nil {
 						log.Println(err)

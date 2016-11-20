@@ -7,4 +7,4 @@ ADD / .
 
 RUN go install
 
-ENTRYPOINT ["/go/bin//configmap-reload"]
+ENTRYPOINT ["/go/bin/configmap-reload"]
